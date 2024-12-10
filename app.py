@@ -1,24 +1,17 @@
-from flask import Flask, jsonify, request
-from flasgger import Swagger
+from flask import Flask, send_from_directory
 
 app = Flask(__name__)
-swagger = Swagger(app)
 
-@app.route('/api/hello', methods=['GET'])
-def hello_world():
-    """
-    A sample endpoint that returns a greeting.
-    ---
-    responses:
-      200:
-        description: A greeting message
-        schema:
-          type: object
-          properties:
-            message:
-              type: string
-    """
-    return jsonify({"message": "Hello, world!"})
+# Route to serve Swagger UI
+@app.route('/swagger-ui')
+def swagger_ui():
+    return send_from_directory('static', 'swagger-ui.html')
 
-if __name__ == '__main__':
-    app.run(host='0.0.0.0', port=5000)
+# Route for the API
+@app.route('/api')
+def api():
+    return "API is up!"
+
+# Start the Flask application
+if __name__ == "__main__":
+    app.run(debug=True, host='0.0.0.0', port=8000)
