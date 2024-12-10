@@ -1,42 +1,49 @@
-name: Deploy Swagger API
+name: Deploy Swagger Flask App on EC2
 
 on:
   push:
     branches:
-      - main
+      - main  # You can adjust this to your desired branch
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest  # Change this to an appropriate runner for your environment (e.g., 'self-hosted' if you're using a custom runner)
 
     steps:
-      # Step 1: Checkout code from the repository
-      - name: Checkout code
+      - name: Checkout repository
         uses: actions/checkout@v2
 
-      # Step 2: Set up Python and install dependencies
+      # Install dependencies (e.g., Python, pip, etc.)
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
-          python-version: '3.8'
+          python-version: '3.8'  # Specify the version of Python you're using
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y nginx python3-pip python3-dev
+          python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      # Step 3: Set up Nginx configuration
-      - name: Set up Nginx
+      # Ensure Gunicorn is installed (in case it's missing)
+      - name: Install Gunicorn
+        run: pip install gunicorn
+
+      # Start Gunicorn to serve the app (you can adjust the command based on your app's location)
+      - name: Start Gunicorn
         run: |
-          # Ensure the nginx configuration directory exists
+          gunicorn --bind 0.0.0.0:8000 app:app --daemon  # Ensure your app is correctly specified here
+
+      # Set up Nginx
+      - name: Set up Nginx configuration
+        run: |
+          # Ensure the directory exists
           sudo mkdir -p /etc/nginx/conf.d
 
-          # Create the swagger_server.conf file with the necessary Nginx config
+          # Create the Nginx config file
           echo "
           server {
               listen 80;
-              server_name your_domain_or_ip;  # Replace this with your actual domain/IP
+              server_name your_domain_or_ip;  # Replace with your actual domain or public IP
 
               location / {
                   proxy_pass http://127.0.0.1:8000;
@@ -48,29 +55,21 @@ jobs:
           }
           " | sudo tee /etc/nginx/conf.d/swagger_server.conf
 
-          # Test the Nginx configuration
+          # Test Nginx configuration
           sudo nginx -t
 
-          # Reload and start Nginx
-          sudo systemctl reload nginx
-          sudo systemctl enable nginx
+          # Start Nginx if it's not running
           sudo systemctl start nginx
 
-      # Step 4: Start Gunicorn to serve the application
-      - name: Start Gunicorn
+          # Reload Nginx to apply the new configuration
+          sudo systemctl reload nginx
+
+          # Enable Nginx to start on boot
+          sudo systemctl enable nginx
+
+      # Additional steps for checking the service or the app's availability (e.g., a health check or curl)
+      - name: Check application health
         run: |
-          # Ensure your virtual environment is activated
-          source /path/to/your/virtualenv/bin/activate  # Adjust the path if needed
-
-          # Start Gunicorn on port 8000
-          nohup gunicorn --bind 0.0.0.0:8000 app:app &
-
-          # Ensure Gunicorn is running
-          ps aux | grep gunicorn
-
-      # Step 5: Ensure the application is accessible
-      - name: Verify application is running
-        run: |
-          curl http://127.0.0.1:8000  # Check that the app is running locally
-          curl http://your_domain_or_ip:8000  # Replace with your actual IP or domain
+          curl -s http://127.0.0.1:8000/health || echo "Application health check failed"
+          curl -s http://<your-ec2-ip>:8000 || echo "Public IP health check failed"
 
