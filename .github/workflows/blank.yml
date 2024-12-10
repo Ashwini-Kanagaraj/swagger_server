@@ -10,31 +10,33 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      # Check out the repository
+      # Step 1: Checkout code from the repository
       - name: Checkout code
         uses: actions/checkout@v2
 
-      # Set up Python and install dependencies
+      # Step 2: Set up Python and install dependencies
       - name: Set up Python
         uses: actions/setup-python@v2
         with:
           python-version: '3.8'
 
-      # Install necessary packages and dependencies
       - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y nginx python3-pip python3-dev
           pip install -r requirements.txt
 
-      # Set up Nginx configuration
+      # Step 3: Set up Nginx configuration
       - name: Set up Nginx
         run: |
+          # Ensure the nginx configuration directory exists
           sudo mkdir -p /etc/nginx/conf.d
+
+          # Create the swagger_server.conf file with the necessary Nginx config
           echo "
           server {
               listen 80;
-              server_name your_domain_or_ip;
+              server_name your_domain_or_ip;  # Replace this with your actual domain/IP
 
               location / {
                   proxy_pass http://127.0.0.1:8000;
@@ -45,14 +47,30 @@ jobs:
               }
           }
           " | sudo tee /etc/nginx/conf.d/swagger_server.conf
+
+          # Test the Nginx configuration
           sudo nginx -t
+
+          # Reload and start Nginx
           sudo systemctl reload nginx
           sudo systemctl enable nginx
           sudo systemctl start nginx
 
-      # Start Gunicorn to serve the application
+      # Step 4: Start Gunicorn to serve the application
       - name: Start Gunicorn
         run: |
-          source /path/to/your/virtualenv/bin/activate
+          # Ensure your virtual environment is activated
+          source /path/to/your/virtualenv/bin/activate  # Adjust the path if needed
+
+          # Start Gunicorn on port 8000
           nohup gunicorn --bind 0.0.0.0:8000 app:app &
+
+          # Ensure Gunicorn is running
           ps aux | grep gunicorn
+
+      # Step 5: Ensure the application is accessible
+      - name: Verify application is running
+        run: |
+          curl http://127.0.0.1:8000  # Check that the app is running locally
+          curl http://your_domain_or_ip:8000  # Replace with your actual IP or domain
+
