@@ -1,87 +1,58 @@
-name: Deploy Swagger Application to EC2
+name: Deploy Swagger API
 
 on:
   push:
     branches:
-      - main  # Trigger on push to main branch
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v2
+      # Check out the repository
+      - name: Checkout code
+        uses: actions/checkout@v2
 
-    - name: Set up SSH
-      uses: webfactory/ssh-agent@v0.5.3
-      with:
-        ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+      # Set up Python and install dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
 
-    - name: Install dependencies
-      run: |
-        sudo apt update
-        sudo apt install -y python3 python3-pip git
+      # Install necessary packages and dependencies
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y nginx python3-pip python3-dev
+          pip install -r requirements.txt
 
-    - name: Install Nginx
-      run: |
-        sudo apt install -y nginx
+      # Set up Nginx configuration
+      - name: Set up Nginx
+        run: |
+          sudo mkdir -p /etc/nginx/conf.d
+          echo "
+          server {
+              listen 80;
+              server_name your_domain_or_ip;
 
-    - name: Set up Python environment
-      run: |
-        python3 -m venv venv
-        source venv/bin/activate
-        pip install --upgrade pip
-        pip install -r requirements.txt
+              location / {
+                  proxy_pass http://127.0.0.1:8000;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+              }
+          }
+          " | sudo tee /etc/nginx/conf.d/swagger_server.conf
+          sudo nginx -t
+          sudo systemctl reload nginx
+          sudo systemctl enable nginx
+          sudo systemctl start nginx
 
-    - name: Clone the Swagger server repository
-      run: |
-        git clone https://github.com/Ashwini-Kanagaraj/swagger_server.git
-        cd swagger_server
-
-    - name: Run Gunicorn server
-      run: |
-        cd swagger_server
-        gunicorn --bind 0.0.0.0:8000 app:app --log-level debug &
-
-    - name: Set up Nginx
-      run: |
-        sudo cp swagger_server/nginx/swagger_server.conf /etc/nginx/conf.d/
-        sudo nginx -t
-        sudo systemctl reload nginx
-        sudo systemctl enable nginx
-        sudo systemctl start nginx
-
-    - name: SSH into EC2 and deploy
-      run: |
-        ssh -o StrictHostKeyChecking=no ubuntu@${{ secrets.EC2_PUBLIC_IP }} << 'EOF'
-        # Install necessary packages
-        sudo yum update -y
-        sudo yum install python3 python3-pip git nginx -y
-
-        # Clone the repository
-        if [ ! -d "swagger_server" ]; then
-            git clone https://github.com/Ashwini-Kanagaraj/swagger_server.git
-        fi
-
-        # Navigate to the cloned directory
-        cd swagger_server
-
-        # Set up Python virtual environment
-        python3 -m venv venv
-        source venv/bin/activate
-
-        # Install requirements
-        pip install --upgrade pip
-        pip install -r requirements.txt
-
-        # Run Gunicorn
-        gunicorn --bind 0.0.0.0:8000 app:app --log-level debug &
-
-        # Set up Nginx configuration
-        sudo cp nginx/swagger_server.conf /etc/nginx/conf.d/
-        sudo nginx -t
-        sudo systemctl reload nginx
-        sudo systemctl enable nginx
-        sudo systemctl start nginx
-        EOF
+      # Start Gunicorn to serve the application
+      - name: Start Gunicorn
+        run: |
+          source /path/to/your/virtualenv/bin/activate
+          nohup gunicorn --bind 0.0.0.0:8000 app:app &
+          ps aux | grep gunicorn
