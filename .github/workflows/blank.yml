@@ -1,66 +1,108 @@
-name: Deploy Flask App to EC2
+name: Deploy Swagger Python App to EC2
 
 on:
   push:
     branches:
-      - main  # You can change this to your default branch
+      - main
+  workflow_dispatch:
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
-    
+
     steps:
-    - name: Checkout Code
-      uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.8'
+      - name: Set up Python 3.x
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'
 
-    - name: Install Dependencies
-      run: |
-        python -m venv venv
-        source venv/bin/activate
-        pip install -r requirements.txt
-    
-    
-
-    - name: Deploy to EC2
-      uses: appleboy/ssh-action@v0.1.5
-      with:
-        host: ${{ secrets.EC2_HOST }}
-        username: ec2-user
-        key: ${{ secrets.EC2_PRIVATE_KEY }}
-        script: |
-          # Update the server and install necessary packages
-          sudo yum update -y
-          sudo yum install -y python3 python3-pip git
-
-          # Pull latest code from GitHub
-          cd /home/ec2-user
-          git pull origin main
-          
-          # Set up virtual environment
-          python3 -m venv venv
+      - name: Install dependencies
+        run: |
+          python -m venv venv
           source venv/bin/activate
-          
-          # Install dependencies
-          pip install -r requirements.txt
-          
-          # Start Gunicorn
-          gunicorn --bind 0.0.0.0:8000 app:app &
-
-          # Ensure you have a static folder for Swagger UI
-          if [ ! -d "static" ]; then
-            mkdir static
+          pip install --upgrade pip
+          if [ -f "requirements.txt" ]; then
+            pip install -r requirements.txt
+          else
+            echo "requirements.txt not found!"
+            exit 1
           fi
 
-          # You can download or copy swagger-ui assets here (for example)
-          curl -o static/swagger-ui.html https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/3.52.5/swagger-ui-bundle.js
-          
-          # Restart Gunicorn to pick up any changes
-          pkill gunicorn
-          gunicorn --bind 0.0.0.0:8000 app:app &
-          
-          echo "Deployment finished."
+      - name: Install Gunicorn
+        run: |
+          source venv/bin/activate
+          pip install gunicorn
+
+      - name: Deploy to EC2
+        uses: appleboy/ssh-action@v0.1.5
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USERNAME }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          port: 22
+          script: |
+            #!/bin/bash
+
+            # Update the server and install necessary packages
+            sudo yum update -y
+            sudo yum install -y python3 python3-pip git
+
+            # Clone the repository if it doesn't exist or pull the latest changes
+            cd /home/ec2-user
+            if [ ! -d ".git" ]; then
+                echo "Cloning the repository..."
+                git clone <your-repository-url> .
+            else
+                echo "Pulling the latest changes from the repository..."
+                git pull origin main
+            fi
+
+            # Set up virtual environment if it doesn't exist
+            if [ ! -d "venv" ]; then
+                echo "Setting up the virtual environment..."
+                python3 -m venv venv
+            fi
+
+            # Activate the virtual environment
+            source venv/bin/activate
+
+            # Install dependencies
+            echo "Installing dependencies from requirements.txt..."
+            if [ -f "requirements.txt" ]; then
+                pip install -r requirements.txt
+            else
+                echo "requirements.txt not found!"
+                exit 1
+            fi
+
+            # Install Gunicorn if it's not already in requirements.txt
+            echo "Installing Gunicorn..."
+            pip install gunicorn
+
+            # Start Gunicorn to serve the app
+            echo "Starting Gunicorn..."
+            gunicorn --bind 0.0.0.0:8000 app:app &
+
+            # Ensure you have a static folder for Swagger UI
+            if [ ! -d "static" ]; then
+              echo "Creating static folder for Swagger UI..."
+              mkdir static
+            fi
+
+            # Download Swagger UI assets if not already present
+            if [ ! -f "static/swagger-ui.html" ]; then
+                echo "Downloading Swagger UI assets..."
+                curl -o static/swagger-ui.html https://cdnjs.cloudflare.com/ajax/libs/swagger-ui/3.52.5/swagger-ui-bundle.js
+            else
+                echo "Swagger UI assets already present."
+            fi
+
+            # Restart Gunicorn to pick up any changes
+            echo "Restarting Gunicorn..."
+            pkill gunicorn
+            gunicorn --bind 0.0.0.0:8000 app:app &
+
+            echo "Deployment finished."
