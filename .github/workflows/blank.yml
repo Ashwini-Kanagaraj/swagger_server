@@ -32,7 +32,7 @@ jobs:
       - name: Start Gunicorn
         run: |
           # Ensure your app path is correct
-          gunicorn --bind 0.0.0.0:8000 app:app --daemon  # Ensure this points to the correct Flask entry point
+          gunicorn --bind 0.0.0.0:8001 app:app --daemon  # Ensure this points to the correct Flask entry point
 
       # Set up Nginx
       - name: Set up Nginx configuration
@@ -47,7 +47,7 @@ jobs:
               server_name 54.161.43.43;  # Replace with your actual EC2 IP or domain
 
               location / {
-                  proxy_pass http://127.0.0.1:8000;
+                  proxy_pass http://127.0.0.1:8001;
                   proxy_set_header Host \$host;
                   proxy_set_header X-Real-IP \$remote_addr;
                   proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
@@ -72,7 +72,7 @@ jobs:
       - name: Check application health
         run: |
           # Check health on localhost
-          curl -s http://127.0.0.1:8000/health || echo "Application health check failed"
+          curl -s http://127.0.0.1:8001/health || echo "Application health check failed"
           
           # Replace <your-ec2-ip> with your actual EC2 IP or domain for public access check
-          curl -s http://54.161.43.43:8000 || echo "Public IP health check failed"
+          curl -s http://54.161.43.43:8001 || echo "Public IP health check failed"
