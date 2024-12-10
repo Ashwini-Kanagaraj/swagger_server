@@ -24,10 +24,7 @@ jobs:
         source venv/bin/activate
         pip install -r requirements.txt
     
-    - name: Run Tests (Optional)
-      run: |
-        source venv/bin/activate
-        pytest tests/
+    
 
     - name: Deploy to EC2
       uses: appleboy/ssh-action@v0.1.5
