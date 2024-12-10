@@ -1,63 +1,43 @@
-name: Deploy Python App with Swagger UI to EC2
+name: Deploy to EC2
 
 on:
   push:
     branches:
-      - main  # Trigger deployment on push to the main branch
+      - main
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    # Step 1: Checkout the code from the repository
-    - name: Checkout code
-      uses: actions/checkout@v2
+    - name: Checkout repository
+      uses: actions/checkout@v3
 
-    # Step 2: Set up Python environment
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.9'  # Specify your Python version
-
-    # Step 3: Install dependencies
-    - name: Install dependencies
+    - name: Set up SSH Key for EC2
       run: |
-        pip install -r requirements.txt  # Ensure you have a requirements.txt file
+        echo "${{ secrets.EC2_PRIVATE_KEY }}" > private-key.pem
+        chmod 600 private-key.pem
 
-    # Step 4: Deploy to EC2
-    - name: Deploy to EC2
-      env:
-        EC2_USER: ${{ secrets.EC2_USER }}
-        EC2_HOST: ${{ secrets.EC2_HOST }}
-        EC2_KEY: ${{ secrets.EC2_KEY }}  # Path to your private EC2 key file
+    - name: Add EC2 Host to known_hosts to avoid verification issues
       run: |
-        # Copy your Python application and Swagger UI files to EC2
-        scp -i $EC2_KEY -o StrictHostKeyChecking=no -r ./app.py $EC2_USER@$EC2_HOST:/home/ubuntu/your-app-folder
-        
-        # SSH into EC2 and perform the necessary steps
-        ssh -i $EC2_KEY -o StrictHostKeyChecking=no $EC2_USER@$EC2_HOST << 'EOF'
+        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
+
+    - name: Copy Python app to EC2
+      run: |
+        scp -i private-key.pem -o StrictHostKeyChecking=no -r ./app.py ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/your-app-folder
+
+    - name: SSH into EC2 and restart app
+      run: |
+        ssh -i private-key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
           # Navigate to the app folder
-          cd /home/ubuntu/app.py
+          cd /home/ubuntu/your-app-folder
           
-          # Install Python dependencies on EC2 if not already installed
+          # Install Python dependencies
           pip install -r requirements.txt
           
-          # Kill the existing app process (if any)
-          pkill -f 'gunicorn: app'  # For Flask with Gunicorn
-          # Or use the following for FastAPI with Uvicorn:
-          # pkill -f 'uvicorn: app'
+          # Kill any existing Gunicorn processes (if applicable)
+          pkill -f 'gunicorn: app'
           
-          # Restart the app
-          nohup gunicorn -w 4 app:app.py &  # For Flask (replace 'app' with your app file name)
-          # Or use this for FastAPI:
-          # nohup uvicorn app:app --host 0.0.0.0 --port 8000 &
-
-          # Optionally, you can restart using systemd if you configured it:
-          # sudo systemctl restart gunicorn  # If using systemd
+          # Restart the application
+          nohup gunicorn -w 4 app:app &  # Modify according to your app structure
         EOF
-
-    # Step 5: Optionally, verify the deployment (optional but recommended)
-    - name: Verify Deployment
-      run: |
-        echo "Deployment complete. Visit your EC2 instance's public IP to access Swagger UI."
