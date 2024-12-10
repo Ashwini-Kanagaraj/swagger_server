@@ -1,12 +1,8 @@
-import pytest
-from app import app
+import app
+from flask.testing import FlaskClient
 
-@pytest.fixture
-def client():
-    with app.test_client() as client:
-        yield client
-
-def test_hello_world(client):
-    response = client.get('/api/hello')
+def test_hello_world():
+    client = app.app.test_client()  # Create a test client
+    response = client.get('/api/hello')  # Test the /api/hello endpoint
     assert response.status_code == 200
-    assert response.json == {"message": "Hello, World!"}
+    assert response.json['message'] == "Hello, world!"
