@@ -1,97 +1,78 @@
-name: Deploy Swagger-documented Python Application
+name: Deploy Swagger Flask App on EC2
 
 on:
   push:
     branches:
-      - main  # Trigger deployment on push to the 'main' branch
+      - main  # You can adjust this to your desired branch
 
 jobs:
   deploy:
-    runs-on: ubuntu-latest  # Change this to the appropriate environment if needed
-    
+    runs-on: ubuntu-latest  # Change this to an appropriate runner for your environment (e.g., 'self-hosted' if you're using a custom runner)
+
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v2
-    
-    - name: Set up Python
-      uses: actions/setup-python@v2
-      with:
-        python-version: '3.8'
-    
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -r requirements.txt
-    
-    - name: Copy Nginx configuration and ensure directory exists
-      run: |
-        # Ensure the Nginx config directory exists
-        sudo mkdir -p /etc/nginx/conf.d
-        
-        # Create the Nginx config file
-        echo "
-        server {
-            listen 80;
-            server_name your_domain_or_ip;  # Replace with your actual domain or public IP
+      - name: Checkout repository
+        uses: actions/checkout@v2
 
-            location / {
-                proxy_pass http://127.0.0.1:8000;
-                proxy_set_header Host \$host;
-                proxy_set_header X-Real-IP \$remote_addr;
-                proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-                proxy_set_header X-Forwarded-Proto \$scheme;
-            }
-        }
-        " | sudo tee /etc/nginx/conf.d/swagger_server.conf
-        
-        # Test Nginx configuration
-        sudo nginx -t
-        
-        # Start Nginx if it's not running
-        sudo systemctl start nginx
-        
-        # Reload Nginx to apply the new configuration
-        sudo systemctl reload nginx
-        
-        # Enable Nginx to start on boot
-        sudo systemctl enable nginx
-    
-    - name: Start Gunicorn
-      run: |
-        # Ensure correct working directory
-        cd /path/to/your/app  # Replace with the actual directory where your app is located
-        
-        # Create a Gunicorn service
-        sudo tee /etc/systemd/system/gunicorn.service <<EOF
-        [Unit]
-        Description=gunicorn daemon for Flask app
-        After=network.target
+      # Install dependencies (e.g., Python, pip, etc.)
+      - name: Set up Python
+        uses: actions/setup-python@v2
+        with:
+          python-version: '3.8'  # Specify the version of Python you're using
 
-        [Service]
-        User=ec2-user
-        Group=ec2-user
-        WorkingDirectory=/path/to/your/app  # Replace with actual path
-        ExecStart=/usr/local/bin/gunicorn --workers 3 --bind 0.0.0.0:8000 app:app
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
 
-        [Install]
-        WantedBy=multi-user.target
-        EOF
-        
-        # Reload systemd to apply Gunicorn service changes
-        sudo systemctl daemon-reload
-        
-        # Start Gunicorn service
-        sudo systemctl start gunicorn
-        
-        # Enable Gunicorn to start on boot
-        sudo systemctl enable gunicorn
-    
-    - name: Health Check for Gunicorn
-      run: |
-        # Health check using curl
-        curl -s http://127.0.0.1:8000/health || echo "Health check failed"
-    
-    - name: Health Check for Public IP
-      run: |
-        # Replace <your-ec2-ip> with your actual EC2 IP or domain
-        curl -s http://<your-ec2-ip>:8000 || echo "Public IP health check failed"
+      # Ensure Gunicorn is installed (in case it's missing)
+      - name: Install Gunicorn
+        run: pip install gunicorn
+
+      # Start Gunicorn to serve the app (ensure your app is correctly specified here)
+      - name: Start Gunicorn
+        run: |
+          # Ensure your app path is correct
+          gunicorn --bind 0.0.0.0:8000 app:app --daemon  # Ensure this points to the correct Flask entry point
+
+      # Set up Nginx
+      - name: Set up Nginx configuration
+        run: |
+          # Ensure the directory exists for Nginx config
+          sudo mkdir -p /etc/nginx/conf.d
+
+          # Create the Nginx config file
+          echo "
+          server {
+              listen 80;
+              server_name 54.161.43.43;  # Replace with your actual EC2 IP or domain
+
+              location / {
+                  proxy_pass http://127.0.0.1:8000;
+                  proxy_set_header Host \$host;
+                  proxy_set_header X-Real-IP \$remote_addr;
+                  proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto \$scheme;
+              }
+          }
+          " | sudo tee /etc/nginx/conf.d/swagger_server.conf
+
+          # Test Nginx configuration
+          sudo nginx -t
+
+          # Start Nginx if it's not running
+          sudo systemctl start nginx
+
+          # Reload Nginx to apply the new configuration
+          sudo systemctl reload nginx
+
+          # Enable Nginx to start on boot
+          sudo systemctl enable nginx
+
+      # Health Check for Gunicorn running on localhost (EC2 instance)
+      - name: Check application health
+        run: |
+          # Check health on localhost
+          curl -s http://127.0.0.1:8000/health || echo "Application health check failed"
+          
+          # Replace <your-ec2-ip> with your actual EC2 IP or domain for public access check
+          curl -s http://54.161.43.43:8000 || echo "Public IP health check failed"
