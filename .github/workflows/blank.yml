@@ -28,10 +28,10 @@ jobs:
       - name: Install Gunicorn
         run: pip install gunicorn
 
-      # Start Gunicorn to serve the app (you can adjust the command based on your app's location)
+      # Start Gunicorn to serve the app (ensure your app is correctly specified here)
       - name: Start Gunicorn
         run: |
-          gunicorn --bind 0.0.0.0:8000 app:app --daemon  # Ensure your app is correctly specified here
+          gunicorn --bind 0.0.0.0:8000 app:app --daemon  # Ensure this points to the correct Flask entry point
 
       # Set up Nginx
       - name: Set up Nginx configuration
@@ -67,9 +67,10 @@ jobs:
           # Enable Nginx to start on boot
           sudo systemctl enable nginx
 
-      # Additional steps for checking the service or the app's availability (e.g., a health check or curl)
+      # Update with your actual EC2 IP or domain
       - name: Check application health
         run: |
           curl -s http://127.0.0.1:8000/health || echo "Application health check failed"
-          curl -s http://<your-ec2-ip>:8000 || echo "Public IP health check failed"
-
+          
+          # Replace <your-ec2-ip> with your actual EC2 IP or domain
+          curl -s http://54.161.43.43:8000 || echo "Public IP health check failed"
