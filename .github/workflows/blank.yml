@@ -1,43 +1,54 @@
-name: Deploy to EC2
+name: Deploy Swagger API to EC2
 
 on:
   push:
     branches:
-      - main
+      - main  # Trigger on pushes to the main branch
 
 jobs:
   deploy:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Checkout repository
-      uses: actions/checkout@v3
+      # Step 1: Checkout the code
+      - name: Checkout Code
+        uses: actions/checkout@v3
 
-    - name: Set up SSH Key for EC2
-      run: |
-        echo "${{ secrets.EC2_PRIVATE_KEY }}" > private-key.pem
-        chmod 600 private-key.pem
+      # Step 2: Set up Python environment
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.8'
 
-    - name: Add EC2 Host to known_hosts to avoid verification issues
-      run: |
-        ssh-keyscan -H ${{ secrets.EC2_HOST }} >> ~/.ssh/known_hosts
-
-    - name: Copy Python app to EC2
-      run: |
-        scp -i private-key.pem -o StrictHostKeyChecking=no -r ./app.py ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }}:/home/ubuntu/your-app-folder
-
-    - name: SSH into EC2 and restart app
-      run: |
-        ssh -i private-key.pem -o StrictHostKeyChecking=no ${{ secrets.EC2_USER }}@${{ secrets.EC2_HOST }} << 'EOF'
-          # Navigate to the app folder
-          cd /home/ubuntu/your-app-folder
-          
-          # Install Python dependencies
+      # Step 3: Install dependencies (optional for testing locally)
+      - name: Install Python Dependencies
+        run: |
+          python -m venv venv
+          source venv/bin/activate
           pip install -r requirements.txt
-          
-          # Kill any existing Gunicorn processes (if applicable)
-          pkill -f 'gunicorn: app'
-          
-          # Restart the application
-          nohup gunicorn -w 4 app:app &  # Modify according to your app structure
-        EOF
+
+      # Step 4: Transfer files to EC2
+      - name: Copy Files to EC2
+        uses: appleboy/scp-action@v0.1.2
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          target: /home/${{ secrets.EC2_USER }}/swagger_app
+          source: .
+
+      # Step 5: Run commands on EC2
+      - name: Deploy on EC2
+        uses: appleboy/ssh-action@v0.1.7
+        with:
+          host: ${{ secrets.EC2_HOST }}
+          username: ${{ secrets.EC2_USER }}
+          key: ${{ secrets.EC2_SSH_KEY }}
+          script: |
+            cd /home/${{ secrets.EC2_USER }}/swagger_app
+            python3 -m venv venv
+            source venv/bin/activate
+            pip install -r requirements.txt
+            sudo systemctl restart nginx  # Restart Nginx if configuration has changed
+            pkill gunicorn || true  # Stop existing Gunicorn process
+            gunicorn --bind 0.0.0.0:5000 app:app &  # Start Gunicorn on port 5000
